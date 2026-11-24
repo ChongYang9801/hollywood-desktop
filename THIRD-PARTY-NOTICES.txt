@@ -1,0 +1,20 @@
+Hollywood by Dustin Kirkland
+Copyright 2014–2026 Dustin Kirkland <dustin.kirkland@gmail.com>
+https://github.com/dustinkirkland/hollywood
+Reference revision b715325107cb3f54f77831c3a9d23adcdfe8de1d
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+assets/upstream-hollywood.sh is the original bin/hollywood script,
+retained verbatim for display by the source code widgets. assets/map.jpg
+is the original map image. assets/soundwave.frames.gz is a resized,
+palette-quantized frame conversion of the original soundwave.mp4.
+
+assets/figlet.txt contains rendered output from FIGlet Standard.
+Standard by Glenn Chappell and Ian Chai, based on Frank's .sig.
+The font was later updated by John Cowan and Paul Burton. No font file
+or FIGlet executable is included.
+https://github.com/cmatsuoka/figlet/blob/master/fonts/standard.flf
+
+assets/errno.txt lists public Linux error identifiers, values and brief
+descriptions drawn from the Linux UAPI errno-base.h and errno.h definitions.
+https://github.com/torvalds/linux/tree/master/include/uapi/asm-generic

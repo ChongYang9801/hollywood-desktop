@@ -129,12 +129,12 @@ namespace HollywoodDesktop
         private double time = -1;
         private bool paused;
 
-        internal WallpaperWindow(DesktopLayer layer, DisplayArea display, int displayNumber)
+        internal WallpaperWindow(DesktopLayer layer, DisplayArea display, int displayNumber, HollywoodOptions options, WindowsData data)
         {
             Rectangle bounds = display.Bounds;
             var area = display.WorkArea.IsEmpty ? bounds : display.WorkArea;
             area.Offset(-bounds.X, -bounds.Y);
-            renderer = new TerminalScene(area, displayNumber);
+            renderer = new TerminalScene(area, displayNumber, options, data);
             try
             {
                 CreateHandle(new CreateParams {

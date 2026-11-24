@@ -12,8 +12,8 @@ using Timer = System.Windows.Forms.Timer;
 [assembly: AssemblyTitle("Hollywood Desktop")]
 [assembly: AssemblyDescription("Animated terminal wallpaper for Windows")]
 [assembly: AssemblyProduct("Hollywood Desktop")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("2.0.0.0")]
+[assembly: AssemblyFileVersion("2.0.0.0")]
 
 namespace HollywoodDesktop
 {
@@ -32,16 +32,30 @@ namespace HollywoodDesktop
                 return;
             }
 
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            if (args.Length == 1 && args[0] == "--license") { ShowLicense(); return; }
+            HollywoodOptions options;
+            if (args.Any(item => item == "-h" || item == "--help") || !HollywoodOptions.TryParse(args, out options))
+            {
+                MessageBox.Show(HollywoodOptions.Help, "Hollywood Desktop", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (options.Terminal)
+            {
+                if (!TerminalHost.Run(options))
+                    MessageBox.Show("无法打开支持虚拟终端序列的 Windows 控制台。", "Hollywood Desktop", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
             bool firstInstance;
             using (var instance = new Mutex(true, InstanceName, out firstInstance))
             {
                 if (!firstInstance) return;
                 try
                 {
-                    Application.EnableVisualStyles();
-                    Application.SetCompatibleTextRenderingDefault(false);
                     using (var stop = new EventWaitHandle(false, EventResetMode.AutoReset, InstanceName + ".Stop"))
-                    using (var wallpaper = new WallpaperApplication(stop))
+                    using (var wallpaper = new WallpaperApplication(stop, options))
                         Application.Run(wallpaper);
                 }
                 finally
@@ -50,11 +64,27 @@ namespace HollywoodDesktop
                 }
             }
         }
+
+        internal static void ShowLicense()
+        {
+            using (var window = new Form { Text = "Hollywood Desktop — License and acknowledgments", Size = new Size(740, 540),
+                StartPosition = FormStartPosition.CenterScreen, ShowIcon = false })
+            using (var text = new TextBox { Multiline = true, ReadOnly = true, Dock = DockStyle.Fill,
+                ScrollBars = ScrollBars.Vertical, WordWrap = true })
+            {
+                text.Text = (HollywoodAssets.ReadText("THIRD-PARTY-NOTICES.txt") + "\n\n" + HollywoodAssets.ReadText("LICENSE"))
+                    .Replace("\r", "").Replace("\n", "\r\n");
+                window.Controls.Add(text);
+                window.ShowDialog();
+            }
+        }
     }
 
     internal sealed class WallpaperApplication : ApplicationContext
     {
         private readonly EventWaitHandle stop;
+        private readonly HollywoodOptions options;
+        private readonly WindowsData data = new WindowsData();
         private readonly Timer frames = new Timer { Interval = 125 };
         private readonly Timer desktopCheck = new Timer { Interval = 500 };
         private readonly Stopwatch animation = new Stopwatch();
@@ -72,12 +102,14 @@ namespace HollywoodDesktop
         private bool paused;
         private bool hasAttached;
 
-        internal WallpaperApplication(EventWaitHandle stop)
+        internal WallpaperApplication(EventWaitHandle stop, HollywoodOptions options)
         {
             this.stop = stop;
+            this.options = options;
             paused = !NativeMethods.ClientAnimationsEnabled();
             pause.Text = paused ? "继续动画" : "暂停动画";
             menu.Items.AddRange(new ToolStripItem[] { pause, shuffle, new ToolStripSeparator(),
+                new ToolStripMenuItem("许可与致谢", null, delegate { Program.ShowLicense(); }),
                 new ToolStripMenuItem("退出并恢复壁纸", null, delegate { ExitThread(); }) });
             tray = new NotifyIcon { Icon = icon ?? SystemIcons.Application, Text = "Hollywood Desktop",
                 ContextMenuStrip = menu, Visible = true };
@@ -107,7 +139,7 @@ namespace HollywoodDesktop
                 if (layer != null && displays.Length != 0 && displays.All(display => layer.Covers(display.Bounds)))
                 {
                     for (int i = 0; i < displays.Length; i++)
-                        windows.Add(new WallpaperWindow(layer, displays[i], i + 1));
+                        windows.Add(new WallpaperWindow(layer, displays[i], i + 1, options, data));
                     attachedDisplays = displays;
                     hasAttached = true;
                     missingDesktop.Reset();
@@ -161,7 +193,7 @@ namespace HollywoodDesktop
         private void UpdateFrames()
         {
             double elapsed = animation.Elapsed.TotalSeconds;
-            if (!paused && elapsed - lastShuffle >= 36) Shuffle();
+            if (!paused && elapsed - lastShuffle >= options.Delay) Shuffle();
             foreach (var window in windows) window.UpdateFrame(scene, elapsed, paused);
         }
 
@@ -185,6 +217,7 @@ namespace HollywoodDesktop
                 tray.Dispose();
                 menu.Dispose();
                 if (icon != null) icon.Dispose();
+                data.Dispose();
             }
             base.Dispose(disposing);
         }
