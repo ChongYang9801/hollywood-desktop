@@ -12,8 +12,8 @@ using Timer = System.Windows.Forms.Timer;
 [assembly: AssemblyTitle("Hollywood Desktop")]
 [assembly: AssemblyDescription("Animated terminal wallpaper for Windows")]
 [assembly: AssemblyProduct("Hollywood Desktop")]
-[assembly: AssemblyVersion("2.0.0.0")]
-[assembly: AssemblyFileVersion("2.0.0.0")]
+[assembly: AssemblyVersion("2.0.1.0")]
+[assembly: AssemblyFileVersion("2.0.1.0")]
 
 namespace HollywoodDesktop
 {

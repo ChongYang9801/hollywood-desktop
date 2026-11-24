@@ -34,7 +34,13 @@ namespace HollywoodDesktop
             int columns = Math.Max(1, (int)(area.Width / cellWidth));
             int rows = Math.Max(1, area.Height / cellHeight);
             TerminalGrid grid = session.Frame(columns, rows, scene, time, paused);
-            for (int y = 0; y < rows; y++)
+            DrawGrid(graphics, grid, area.Location, cellWidth, cellHeight);
+        }
+
+        internal void DrawGrid(Graphics graphics, TerminalGrid grid, Point origin, float cellWidth, int cellHeight)
+        {
+            int columns = grid.Columns;
+            for (int y = 0; y < grid.Rows; y++)
             {
                 int x = 0;
                 while (x < columns)
@@ -44,7 +50,7 @@ namespace HollywoodDesktop
                     int end = x + 1;
                     while (end < columns && grid.Background[y * columns + end] == background) end++;
                     if (background != 0)
-                        graphics.FillRectangle(Brush(background), area.Left + x * cellWidth, area.Top + y * cellHeight,
+                        graphics.FillRectangle(Brush(background), origin.X + x * cellWidth, origin.Y + y * cellHeight,
                             (end - x) * cellWidth + 0.5f, cellHeight);
                     x = end;
                 }
@@ -52,15 +58,27 @@ namespace HollywoodDesktop
                 while (x < columns)
                 {
                     int index = y * columns + x;
-                    if (grid.Text[index] == ' ') { x++; continue; }
+                    if (grid.Spans[index] == TerminalGrid.Continuation || (grid.Text[index] == ' ' && grid.Elements[index] == null))
+                    { x++; continue; }
                     byte foreground = grid.Foreground[index];
+                    float left = origin.X + x * cellWidth;
+                    int top = origin.Y + y * cellHeight;
+                    if (grid.Text[index] >= 0x80 || grid.Elements[index] != null)
+                    {
+                        int width = grid.Spans[index] == 2 ? 2 : 1;
+                        if (grid.Elements[index] == null && grid.Text[index] >= 0x2500 && grid.Text[index] <= 0x257f)
+                            DrawBorder(graphics, grid.Text[index], foreground, left, top, cellWidth, cellHeight);
+                        else
+                            graphics.DrawString(grid.Elements[index] ?? InternSmall(grid.Text[index].ToString()), font, Brush(foreground),
+                                new RectangleF(left, top, width * cellWidth, cellHeight), format);
+                        x += width;
+                        continue;
+                    }
                     int end = x + 1;
-                    while (end < columns && grid.Foreground[y * columns + end] == foreground && grid.Text[y * columns + end] < 0x80 && grid.Text[index] < 0x80) end++;
+                    while (end < columns && grid.Foreground[y * columns + end] == foreground && grid.Text[y * columns + end] < 0x80 &&
+                           grid.Elements[y * columns + end] == null && grid.Spans[y * columns + end] == 0) end++;
                     string text = new string(grid.Text, index, end - x).TrimEnd(' ');
-                    if (text.Length == 1 && text[0] >= 0x2500 && text[0] <= 0x257f)
-                        DrawBorder(graphics, text[0], foreground, area.Left + x * cellWidth, area.Top + y * cellHeight, cellWidth, cellHeight);
-                    else
-                        graphics.DrawString(InternSmall(text), font, Brush(foreground), area.Left + x * cellWidth, area.Top + y * cellHeight, format);
+                    graphics.DrawString(InternSmall(text), font, Brush(foreground), left, top, format);
                     x = end;
                 }
             }
@@ -225,8 +243,11 @@ namespace HollywoodDesktop
             Color.FromArgb(229, 229, 229), Color.FromArgb(102, 102, 102), Color.FromArgb(241, 76, 76), Color.FromArgb(35, 209, 139),
             Color.FromArgb(245, 245, 67), Color.FromArgb(59, 142, 234), Color.FromArgb(214, 112, 214), Color.FromArgb(41, 184, 219), Color.White };
         internal const string Junctions = " ───│┘└┴│┐┌┬│┤├┼";
+        internal const byte Continuation = byte.MaxValue;
         internal readonly int Columns, Rows;
         internal readonly char[] Text;
+        internal readonly string[] Elements;
+        internal readonly byte[] Spans;
         internal readonly byte[] Foreground, Background;
         private readonly byte[] separators;
         private readonly char[] blank;
@@ -236,6 +257,8 @@ namespace HollywoodDesktop
             Columns = columns;
             Rows = rows;
             Text = new char[columns * rows];
+            Elements = new string[Text.Length];
+            Spans = new byte[Text.Length];
             Foreground = new byte[Text.Length];
             Background = new byte[Text.Length];
             separators = new byte[Text.Length];
@@ -245,8 +268,43 @@ namespace HollywoodDesktop
         internal void Clear()
         {
             Array.Copy(blank, Text, Text.Length);
+            Array.Clear(Elements, 0, Elements.Length);
+            Array.Clear(Spans, 0, Spans.Length);
             Array.Clear(Foreground, 0, Foreground.Length);
             Array.Clear(Background, 0, Background.Length);
+        }
+
+        internal void Put(int index, char character, string element, int width, byte color, byte background)
+        {
+            ClearWide(index);
+            if (width == 2)
+            {
+                ClearWide(index + 1);
+                Text[index + 1] = ' ';
+                Elements[index + 1] = null;
+                Foreground[index + 1] = color;
+                Background[index + 1] = background;
+                Spans[index + 1] = Continuation;
+            }
+            Text[index] = character;
+            Elements[index] = element;
+            Foreground[index] = color;
+            Background[index] = background;
+            Spans[index] = width == 2 ? (byte)2 : (byte)0;
+        }
+
+        private void ClearWide(int index)
+        {
+            if (Spans[index] == 0) return;
+            int lead = Spans[index] == Continuation ? index - 1 : index;
+            for (int i = lead; i < lead + 2; i++)
+            {
+                Text[i] = ' ';
+                Spans[i] = 0;
+                Elements[i] = null;
+                Foreground[i] = 0;
+                Background[i] = 0;
+            }
         }
 
         internal void ClearSeparators() { Array.Clear(separators, 0, separators.Length); }
@@ -302,21 +360,29 @@ namespace HollywoodDesktop
         internal void Put(int x, int y, char value, byte color, byte background = 0)
         {
             if (x < 0 || y < 0 || x >= Width || y >= Height) return;
-            int i = (area.Y + y) * grid.Columns + area.X + x;
-            grid.Text[i] = value;
-            grid.Foreground[i] = color;
-            grid.Background[i] = background;
+            grid.Put((area.Y + y) * grid.Columns + area.X + x, value, null, 1, color, background);
         }
 
         internal void Write(int x, int y, string text, byte color = 7, byte background = 0)
         {
             if (y < 0 || y >= Height || x >= Width) return;
             int column = x;
-            foreach (char ch in text)
+            int row = (area.Y + y) * grid.Columns + area.X;
+            for (int i = 0; i < text.Length; )
             {
                 if (column >= Width) break;
-                if (ch == '\t') { column += 4 - (column & 3); continue; }
-                if (ch >= ' ' && !char.IsControl(ch)) Put(column++, y, ch, color, background);
+                char character = text[i];
+                int width = TerminalText.Advance(text, i, column);
+                int length = TerminalText.ElementLength(text, i);
+                if (column + width > Width) break;
+                if (width > 0 && character != '\t' && column >= 0)
+                {
+                    string element = length > 1 ? text.Substring(i, length) : null;
+                    if (length == 1 && char.IsSurrogate(character)) character = '\ufffd';
+                    grid.Put(row + column, character, element, width, color, background);
+                }
+                i += length;
+                column += width;
             }
         }
     }

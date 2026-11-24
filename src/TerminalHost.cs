@@ -103,7 +103,8 @@ namespace HollywoodDesktop
                 for (int col = 0; col < grid.Columns; col++)
                 {
                     int index = row * grid.Columns + col;
-                    if (grid.Foreground[index] != foreground && grid.Text[index] != ' ')
+                    if (grid.Spans[index] == TerminalGrid.Continuation) continue;
+                    if (grid.Foreground[index] != foreground && (grid.Text[index] != ' ' || grid.Elements[index] != null))
                     {
                         foreground = grid.Foreground[index];
                         text.Append("\u001b[38;5;").Append(foreground).Append('m');
@@ -113,7 +114,8 @@ namespace HollywoodDesktop
                         background = grid.Background[index];
                         text.Append("\u001b[48;5;").Append(background).Append('m');
                     }
-                    text.Append(grid.Text[index]);
+                    if (grid.Elements[index] == null) text.Append(grid.Text[index]);
+                    else text.Append(grid.Elements[index]);
                 }
             }
             return text.ToString();
@@ -126,7 +128,9 @@ namespace HollywoodDesktop
             while (offset < text.Length)
             {
                 int written;
-                string piece = text.Substring(offset, Math.Min(chunk, text.Length - offset));
+                int length = Math.Min(chunk, text.Length - offset);
+                if (offset + length < text.Length && char.IsHighSurrogate(text[offset + length - 1])) length--;
+                string piece = text.Substring(offset, length);
                 if (!WriteConsole(console, piece, piece.Length, out written, IntPtr.Zero) || written <= 0) return false;
                 offset += written;
             }

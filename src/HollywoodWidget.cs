@@ -169,7 +169,7 @@ namespace HollywoodDesktop
                 {
                     char firstChar = match.Value[0];
                     byte color = firstChar == '"' ? (byte)3 : firstChar == '/' || firstChar == '#' ? (byte)8 : char.IsDigit(firstChar) ? (byte)13 : (byte)12;
-                    view.Write(x + match.Index, top + i, match.Value, color);
+                    view.Write(x + TerminalText.Columns(line, match.Index), top + i, match.Value, color);
                 }
             }
         }
@@ -183,7 +183,7 @@ namespace HollywoodDesktop
                 int y = 0;
                 view.Write(0, y++, " bmon  |  Interfaces               RX Rate       TX Rate", 0, 6);
                 foreach (var net in sample.Network.Take(Math.Max(1, view.Height / 3)))
-                    view.Write(0, y++, string.Format(CultureInfo.InvariantCulture, "{0,-29} {1,10}/s {2,10}/s", Short(net.Name, 27), Units(net.RxRate), Units(net.TxRate)), 7);
+                    view.Write(0, y++, string.Format(CultureInfo.InvariantCulture, "{0}   {1,10}/s {2,10}/s", TerminalText.FitPadded(net.Name, 27), Units(net.RxRate), Units(net.TxRate)), 7);
                 y++;
                 Plot(view, 0, y, view.Width, Math.Max(2, (view.Height - y) / 2), sample.History, true, 2);
                 Plot(view, 0, y + Math.Max(2, (view.Height - y) / 2), view.Width, Math.Max(2, (view.Height - y) / 2), sample.History, false, 4);
@@ -294,8 +294,9 @@ namespace HollywoodDesktop
                 var log = logs[(latest + row) % logs.Length];
                 byte color = log.Level <= 2 ? (byte)9 : log.Level == 3 ? (byte)11 : (byte)6;
                 view.Write(0, row, log.Time.ToString("MMM dd HH:mm:ss", CultureInfo.InvariantCulture), 3);
-                view.Write(16, row, log.Provider + "[" + log.Id + "]: ", color);
-                view.Write(18 + log.Provider.Length + log.Id.ToString().Length + 2, row, log.Text, 7);
+                string prefix = log.Provider + "[" + log.Id + "]: ";
+                view.Write(16, row, prefix, color);
+                view.Write(16 + TerminalText.Columns(prefix, prefix.Length), row, log.Text, 7);
             }
         }
 
@@ -451,7 +452,6 @@ namespace HollywoodDesktop
             catch (UnauthorizedAccessException) { }
         }
 
-        private static string Short(string value, int length) { return value.Length <= length ? value : value.Substring(0, length); }
         private static double Fraction(ulong part, ulong full) { return full == 0 ? 0 : (double)part / full; }
         private static string[] Lines(string text) { return text.Replace("\r", "").Split('\n'); }
 
